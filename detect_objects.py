@@ -1,36 +1,36 @@
-import torch
+from ultralytics import YOLO
 import cv2
 from collections import defaultdict
-import sys
-import os
 
-# Add yolov5 directory to path
-sys.path.insert(0, './yolov5')
-
-# Load YOLOv5 model
-model = torch.hub.load('yolov5', 'yolov5s', source='local')
+# Load YOLOv8 model
+model = YOLO('yolov8n.pt')  # Small and fast
 
 # Open video
 cap = cv2.VideoCapture('video.mp4')
 frame_count = 0
-detections = defaultdict(int)
+counts = defaultdict(int)
 
 while True:
-    ret, frame = cap.read()
-    if not ret:
+    success, frame = cap.read()
+    if not success:
         break
 
+    # Only analyze every 10th frame for speed
     frame_count += 1
     if frame_count % 10 != 0:
         continue
 
-    results = model(frame)
-    for *xyxy, conf, cls in results.xyxy[0]:
-        label = model.names[int(cls)]
-        detections[label] += 1
+    # Run detection
+    results = model.predict(frame, verbose=False)
+    boxes = results[0].boxes
+
+    if boxes:
+        for cls_id in boxes.cls.tolist():
+            label = model.names[int(cls_id)]
+            counts[label] += 1
 
 cap.release()
 
-# Output results
-for label, count in sorted(detections.items(), key=lambda x: -x[1]):
+# Output format: "5 person", "2 car", etc.
+for label, count in sorted(counts.items(), key=lambda x: -x[1]):
     print(f"{count} {label}")
