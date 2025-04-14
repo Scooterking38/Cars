@@ -1,3 +1,11 @@
+name: YOLOv8 Video Detection
+
+on:
+  push:
+    paths:
+      - '**.mp4'
+  workflow_dispatch:
+
 jobs:
   detect:
     runs-on: ubuntu-22.04  # Pin to Ubuntu 22.04
@@ -8,7 +16,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.10'  # Specify a supported Python version
+          python-version: '3.10'
 
       - name: Install dependencies
         run: pip install ultralytics opencv-python
