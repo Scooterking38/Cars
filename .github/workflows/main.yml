@@ -1,14 +1,28 @@
-name: YOLOv8 Video Detection
+name: YOLOv8 Tracking & Counting
 
 on:
-  push:
-    paths:
-      - '**.mp4'
   workflow_dispatch:
+    inputs:
+      video_filename:
+        description: 'MP4 file to process (must be in repo)'
+        required: true
+        default: 'video.mp4'
+      model_variant:
+        description: 'YOLOv8 model variant'
+        required: true
+        default: 'yolov8n.pt'
+        type: choice
+        options:
+          - yolov8n.pt
+          - yolov8s.pt
+          - yolov8m.pt
+          - yolov8l.pt
+          - yolov8x.pt
 
 jobs:
-  detect:
-    runs-on: ubuntu-22.04  # Pin to Ubuntu 22.04
+  track_and_count:
+    runs-on: ubuntu-22.04
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -21,37 +35,57 @@ jobs:
       - name: Install dependencies
         run: pip install ultralytics opencv-python
 
-      - name: Process all MP4s with YOLOv8
+      - name: Run YOLOv8 Tracking & Counting
+        env:
+          VIDEO_FILENAME: ${{ github.event.inputs.video_filename }}
+          MODEL_VARIANT: ${{ github.event.inputs.model_variant }}
         run: |
           python - <<EOF
           import cv2
           from ultralytics import YOLO
-          from glob import glob
+          from collections import defaultdict
           import os
 
-          model = YOLO('yolov8x.pt')
-          for path in glob("*.mp4"):
-              cap = cv2.VideoCapture(path)
-              w, h = int(cap.get(3)), int(cap.get(4))
-              fps = cap.get(cv2.CAP_PROP_FPS)
-              out_path = f"out_{os.path.basename(path)}"
-              out = cv2.VideoWriter(out_path, cv2.VideoWriter_fourcc(*"mp4v"), fps, (w, h))
-              while cap.isOpened():
-                  ret, frame = cap.read()
-                  if not ret: break
-                  results = model(frame)[0]
-                  for box in results.boxes:
-                      x1, y1, x2, y2 = map(int, box.xyxy[0])
-                      label = model.names[int(box.cls[0])]
-                      cv2.rectangle(frame, (x1, y1), (x2, y2), (0,255,0), 2)
-                      cv2.putText(frame, label, (x1, y1-5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1)
-                  out.write(frame)
-              cap.release()
-              out.release()
+          video_path = os.environ['VIDEO_FILENAME']
+          model_variant = os.environ['MODEL_VARIANT']
+          model = YOLO(model_variant)
+
+          cap = cv2.VideoCapture(video_path)
+          w, h = int(cap.get(3)), int(cap.get(4))
+          fps = cap.get(cv2.CAP_PROP_FPS)
+          out_path = f"out_{os.path.basename(video_path)}"
+          out = cv2.VideoWriter(out_path, cv2.VideoWriter_fourcc(*"mp4v"), fps, (w, h))
+
+          while cap.isOpened():
+              ret, frame = cap.read()
+              if not ret: break
+
+              results = model.track(source=frame, persist=True, stream=False)[0]
+              counts = defaultdict(int)
+
+              for box in results.boxes:
+                  cls_id = int(box.cls[0])
+                  label = model.names[cls_id]
+                  x1, y1, x2, y2 = map(int, box.xyxy[0])
+                  track_id = int(box.id[0]) if box.id is not None else -1
+                  counts[label] += 1
+                  cv2.rectangle(frame, (x1, y1), (x2, y2), (0,255,0), 2)
+                  cv2.putText(frame, f"{label} #{track_id}", (x1, y1-5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1)
+
+              y_offset = 20
+              for label, count in counts.items():
+                  text = f"{label}: {count}"
+                  cv2.putText(frame, text, (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255,0,0), 2)
+                  y_offset += 20
+
+              out.write(frame)
+
+          cap.release()
+          out.release()
           EOF
 
-      - name: Upload processed videos
-        uses: actions/upload-artifact@v4
+      - name: Upload output video
+        uses: actions/upload-artifact@v3
         with:
-          name: yolo-videos
+          name: tracked-video
           path: out_*.mp4
