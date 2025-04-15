@@ -85,7 +85,7 @@ jobs:
           EOF
 
       - name: Upload output video
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: tracked-video
           path: out_*.mp4
