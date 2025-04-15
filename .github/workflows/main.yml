@@ -29,7 +29,7 @@ jobs:
           from glob import glob
           import os
 
-          model = YOLO('yolov8n.pt')
+          model = YOLO('yolov8x.pt')
           for path in glob("*.mp4"):
               cap = cv2.VideoCapture(path)
               w, h = int(cap.get(3)), int(cap.get(4))
